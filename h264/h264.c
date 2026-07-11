@@ -34,6 +34,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <string.h>
 #include <pthread.h>
 #include <stdatomic.h>
+#include <stdint.h>
 
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -174,44 +175,46 @@ int sendtodecoder(COMPONENT_T *video_decode, COMPONENT_T *video_scheduler, COMPO
 			return -6;
 	}
 
+	return 0;
 }
 
 
 int idrsockport = -1;
 char* sinkip = "192.168.173.1";
-static void* addnullpacket(rtppacket* beg)
+static void* addnullpacket(void* arg)
 {
+    rtppacket* beg = (rtppacket*)arg;
 	struct sockaddr_in addr1, addr2;
 	struct sockaddr_in sourceaddr;
 	socklen_t addrlen = sizeof(sourceaddr);
-	int fd, fd2;
-
-
+	int fd = -1, fd2 = -1;
 
 	if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
 	{
 		perror("cannot create socket\n");
-		return 0;
+		return NULL;
 	}
-
 
 	memset((char *)&addr1, 0, sizeof(addr1));
 	addr1.sin_family = AF_INET;
 	addr1.sin_addr.s_addr = inet_addr(sinkip);
 	addr1.sin_port = htons(1028);
 
+    memset((char *)&addr2, 0, sizeof(addr2));
+
 	struct timeval tv;
 	tv.tv_sec = 10;
+    tv.tv_usec = 0;
 	if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO,&tv,sizeof(tv)) < 0) 
 	{
 		perror("cannot set timeout\n");
-		return 0;
+		return NULL;
 	}
 
 	if (bind(fd, (struct sockaddr *)&addr1, sizeof(addr1)) < 0)
 	{
 		perror("bind failed");
-		return 0;
+		return NULL;
 	}
 
 	if (idrsockport > 0)
@@ -219,18 +222,12 @@ static void* addnullpacket(rtppacket* beg)
 		if ((fd2 = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
 		{
 			perror("cannot create socket\n");
-			return 0;
+			return NULL;
 		}
-		memset((char *)&addr2, 0, sizeof(addr2));
 		addr2.sin_family = AF_INET;
 		addr2.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 		addr2.sin_port = htons(idrsockport);
 	}
-
-
-
-
-
 
 	while (1)
 	{
@@ -270,8 +267,10 @@ static void* addnullpacket(rtppacket* beg)
 		}else if(p1->recvlen < 0)
 		{
 			const char topython[] = "recv timeout";
-			if (sendto(fd2, topython, sizeof(topython), 0, (struct sockaddr *)&addr2, addrlen) < 0)
-				perror("recv timeout");
+            if (fd2 >= 0) {
+			    if (sendto(fd2, topython, sizeof(topython), 0, (struct sockaddr *)&addr2, addrlen) < 0)
+				    perror("recv timeout");
+            }
 			exit(1);
 		}
 
@@ -338,8 +337,10 @@ static void* addnullpacket(rtppacket* beg)
 		else if (idrsockport > 0 && (numofpacket == 12))
 		{
 			const char topython[] = "send idr";
-			if (sendto(fd2, topython, sizeof(topython), 0, (struct sockaddr *)&addr2, addrlen) < 0)
-				perror("sendto error");
+            if (fd2 >= 0) {
+			    if (sendto(fd2, topython, sizeof(topython), 0, (struct sockaddr *)&addr2, addrlen) < 0)
+				    perror("sendto error");
+            }
 			printf("idr:%d\n", numofpacket);
 		}
 
@@ -370,15 +371,17 @@ static void* addnullpacket(rtppacket* beg)
 		}
 
 	}
-
+    return NULL;
 }
 int audiodest = 0;
 
-static int video_decode_test(rtppacket* beg)
+static void* video_decode_test(void* arg)
 {
+    rtppacket* beg = (rtppacket*)arg;
 	OMX_VIDEO_PARAM_PORTFORMATTYPE format;
 	OMX_TIME_CONFIG_CLOCKSTATETYPE cstate;
-	COMPONENT_T *video_decode = NULL, *video_scheduler = NULL, *video_render = NULL, *clock = NULL, *audio_render = NULL;
+	COMPONENT_T *video_decode = NULL, *video_scheduler = NULL, *video_render = NULL, *clock = NULL;
+    AUDIOPLAY_STATE_T *audio_render = NULL;
 	COMPONENT_T *list[5];
 	TUNNEL_T tunnel[4];
 	ILCLIENT_T *client;
@@ -389,12 +392,12 @@ static int video_decode_test(rtppacket* beg)
 
 
 	if ((client = ilclient_init()) == NULL)
-		return -3;
+		return (void*)(intptr_t)-3;
 
 	if (OMX_Init() != OMX_ErrorNone)
 	{
 		ilclient_destroy(client);
-		return -4;
+		return (void*)(intptr_t)-4;
 	}
 
 	// create video_decode
@@ -472,7 +475,7 @@ static int video_decode_test(rtppacket* beg)
 		ilclient_enable_port_buffers(video_decode, 130, NULL, NULL, NULL) == 0
 		)
 	{
-		OMX_BUFFERHEADERTYPE *buf;
+		OMX_BUFFERHEADERTYPE *buf = NULL;
 		int port_settings_changed = 0;
 
 		ilclient_change_component_state(video_decode, OMX_StateExecuting);
@@ -481,8 +484,6 @@ static int video_decode_test(rtppacket* beg)
 		int oldcc = 0;
 		int peserror = 1;
 		int first = 1;
-		int peslen = -100, actuallen = 0;
-		unsigned char* oldlen = NULL;
 
 		rtppacket*scan = beg;
 		while (1)
@@ -585,11 +586,15 @@ static int video_decode_test(rtppacket* beg)
 			scan = scan->next;
 		}
 
-		buf->nFilledLen = 0;
-		buf->nFlags = OMX_BUFFERFLAG_TIME_UNKNOWN | OMX_BUFFERFLAG_EOS;
+        buf = ilclient_get_input_buffer(video_decode, 130, 1);
+        if (buf != NULL)
+        {
+		    buf->nFilledLen = 0;
+		    buf->nFlags = OMX_BUFFERFLAG_TIME_UNKNOWN | OMX_BUFFERFLAG_EOS;
 
-		if (OMX_EmptyThisBuffer(ILC_GET_HANDLE(video_decode), buf) != OMX_ErrorNone)
-			status = -20;
+		    if (OMX_EmptyThisBuffer(ILC_GET_HANDLE(video_decode), buf) != OMX_ErrorNone)
+			    status = -20;
+        }
 
 		// wait for EOS from render
 		ilclient_wait_for_event(video_render, OMX_EventBufferFlag, 90, 0, OMX_BUFFERFLAG_EOS, 0,
@@ -615,7 +620,7 @@ static int video_decode_test(rtppacket* beg)
 	OMX_Deinit();
 
 	ilclient_destroy(client);
-	return status;
+	return (void*)(intptr_t)status;
 }
 
 int main(int argc, char **argv)
@@ -658,5 +663,3 @@ int main(int argc, char **argv)
 	return 0;
 
 }
-
-
