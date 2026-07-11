@@ -134,7 +134,7 @@ int main(int argc, char **argv)
 		else if (e.type == KeyPress)
 		{
 			keyboard[4] = 0x03;
-			printf("KeyPress code:%d\n", e.xkey.keycode);
+			printf("KeyPress code:%u\n", e.xkey.keycode);
 
 
 			int keysyms_per_keycode_return;
@@ -155,11 +155,11 @@ int main(int argc, char **argv)
 				if (key != NoSymbol)
 				{
 
-					printf("%x	", key);
+					printf("%x	", (unsigned char)key);
 					//printf("%s	", XKeysymToString(key));
 					keyboard[9] = key;
 #ifdef fdsend
-					printf("send:%d\n", send(fd, keyboard, sizeof(keyboard), 0));
+					printf("send:%zd\n", send(fd, keyboard, sizeof(keyboard), 0));
 #endif
 				}
 			}
@@ -171,23 +171,23 @@ int main(int argc, char **argv)
 			{
 				keyboard[9] = 0xFF & (*keysym);
 #ifdef fdsend
-				printf("send:%d\n", send(fd, keyboard, sizeof(keyboard), 0));
+				printf("send:%zd\n", send(fd, keyboard, sizeof(keyboard), 0));
 #endif
 			}
 			else if ((*keysym) == 0xffff)
 			{
 				keyboard[9] = 0x7F;
-				printf("special:%x\n", keyboard[9]);
+				printf("special:%x\n", (unsigned char)keyboard[9]);
 #ifdef fdsend
-				printf("send:%d\n", send(fd, keyboard, sizeof(keyboard), 0));
+				printf("send:%zd\n", send(fd, keyboard, sizeof(keyboard), 0));
 #endif
 			}
 			else if ((*keysym) == 0xff52)
 			{
 				keyboard[9] = 38;
-				printf("special:%x\n", keyboard[9]);
+				printf("special:%x\n", (unsigned char)keyboard[9]);
 #ifdef fdsend
-				printf("send:%d\n", send(fd, keyboard, sizeof(keyboard), 0));
+				printf("send:%zd\n", send(fd, keyboard, sizeof(keyboard), 0));
 #endif
 			}
 
@@ -195,7 +195,7 @@ int main(int argc, char **argv)
 
 
 
-			printf("%x\n", *keysym);
+			printf("%lx\n", *keysym);
 
 			//printf("%s\n", XKeysymToString(*keysym));
 
@@ -205,7 +205,7 @@ int main(int argc, char **argv)
 		else if (e.type == KeyRelease)
 		{
 			keyboard[4] = 0x04;
-			printf("KeyRelease code:%d\n", e.xkey.keycode);
+			printf("KeyRelease code:%u\n", e.xkey.keycode);
 
 
 			int keysyms_per_keycode_return;
@@ -226,11 +226,11 @@ int main(int argc, char **argv)
 				if (key != NoSymbol)
 				{
 
-					printf("%x	", key);
+					printf("%x	", (unsigned char)key);
 					//printf("%s	", XKeysymToString(key));
 					keyboard[9] = key;
 #ifdef fdsend
-					printf("send:%d\n", send(fd, keyboard, sizeof(keyboard), 0));
+					printf("send:%zd\n", send(fd, keyboard, sizeof(keyboard), 0));
 #endif
 
 				}
@@ -242,25 +242,25 @@ int main(int argc, char **argv)
 				|| (*keysym) == 0xff1b)
 			{
 				keyboard[9] = 0xFF & (*keysym);
-				printf("special:%x\n", keyboard[9]);
+				printf("special:%x\n", (unsigned char)keyboard[9]);
 #ifdef fdsend
-				printf("send:%d\n", send(fd, keyboard, sizeof(keyboard), 0));
+				printf("send:%zd\n", send(fd, keyboard, sizeof(keyboard), 0));
 #endif
 			}
 			else if ( (*keysym) == 0xffff)
 			{
 				keyboard[9] = 0x7F;
-				printf("special:%x\n", keyboard[9]);
+				printf("special:%x\n", (unsigned char)keyboard[9]);
 #ifdef fdsend
-				printf("send:%d\n", send(fd, keyboard, sizeof(keyboard), 0));
+				printf("send:%zd\n", send(fd, keyboard, sizeof(keyboard), 0));
 #endif
 			}
 			else if ((*keysym) == 0xff52)
 			{
 				keyboard[9] = 38;
-				printf("special:%x\n", keyboard[9]);
+				printf("special:%x\n", (unsigned char)keyboard[9]);
 #ifdef fdsend
-				printf("send:%d\n", send(fd, keyboard, sizeof(keyboard), 0));
+				printf("send:%zd\n", send(fd, keyboard, sizeof(keyboard), 0));
 #endif
 			}
 
@@ -272,8 +272,8 @@ int main(int argc, char **argv)
 		}
 		else if (e.type == ButtonPress)
 		{
-			int buttonnum = e.xbutton.button;
-			printf("ButtonPress:%d\n", buttonnum);
+			unsigned int buttonnum = e.xbutton.button;
+			printf("ButtonPress:%u\n", buttonnum);
 
 			if (buttonnum < 4)
 			{
@@ -283,7 +283,7 @@ int main(int argc, char **argv)
 				mousemove[11] = y >> 8;
 				mousemove[12] = 0xFF & y;
 #ifdef fdsend
-				printf("send:%d\n", send(fd, mousemove, sizeof(mousemove), 0));
+				printf("send:%zd\n", send(fd, mousemove, sizeof(mousemove), 0));
 #endif
 			}
 			else if(buttonnum < 6)
@@ -297,7 +297,7 @@ int main(int argc, char **argv)
 					scroll[7] &= ~0x20;
 				}
 #ifdef fdsend
-				printf("send:%d\n", send(fd, scroll, sizeof(scroll), 0));
+				printf("send:%zd\n", send(fd, scroll, sizeof(scroll), 0));
 #endif
 
 			}
@@ -305,14 +305,14 @@ int main(int argc, char **argv)
 		}
 		else if (e.type == ButtonRelease)
 		{
-			printf("ButtonRelease:%d\n", e.xbutton.button);
+			printf("ButtonRelease:%u\n", e.xbutton.button);
 			mousemove[4] = 1;
 			mousemove[9] = x >> 8;
 			mousemove[10] = 0xFF & x;
 			mousemove[11] = y >> 8;
 			mousemove[12] = 0xFF & y;
 #ifdef fdsend
-			printf("send:%d\n", send(fd, mousemove, sizeof(mousemove), 0));
+			printf("send:%zd\n", send(fd, mousemove, sizeof(mousemove), 0));
 #endif
 		}
 		else if (e.type == MotionNotify)
@@ -353,7 +353,7 @@ int main(int argc, char **argv)
 			mousemove[11] = y >> 8;
 			mousemove[12] = 0xFF & y;
 #ifdef fdsend
-			printf("send:%d\n", send(fd, mousemove, sizeof(mousemove), 0));
+			printf("send:%zd\n", send(fd, mousemove, sizeof(mousemove), 0));
 #endif
 
 		}
