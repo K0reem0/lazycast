@@ -155,8 +155,6 @@ int sendtodecoder(COMPONENT_T *video_decode, COMPONENT_T *video_scheduler, COMPO
 
 
 		buf->nFilledLen = data_len;
-
-		//printf("len:%d\n", data_len);
 		
 		buf->nOffset = 0;
 		if (*first)
@@ -165,10 +163,6 @@ int sendtodecoder(COMPONENT_T *video_decode, COMPONENT_T *video_scheduler, COMPO
 			*first = 0;
 		}else
 			buf->nFlags |= OMX_BUFFERFLAG_TIME_UNKNOWN;
-
-
-		
-
 
 
 		if (OMX_EmptyThisBuffer(ILC_GET_HANDLE(video_decode), buf) != OMX_ErrorNone)
@@ -380,8 +374,7 @@ static void* video_decode_test(void* arg)
     rtppacket* beg = (rtppacket*)arg;
 	OMX_VIDEO_PARAM_PORTFORMATTYPE format;
 	OMX_TIME_CONFIG_CLOCKSTATETYPE cstate;
-	COMPONENT_T *video_decode = NULL, *video_scheduler = NULL, *video_render = NULL, *clock = NULL;
-    AUDIOPLAY_STATE_T *audio_render = NULL;
+	COMPONENT_T *video_decode = NULL, *video_scheduler = NULL, *video_render = NULL, *clock = NULL, *audio_render = NULL;
 	COMPONENT_T *list[5];
 	TUNNEL_T tunnel[4];
 	ILCLIENT_T *client;
@@ -428,7 +421,7 @@ static void* video_decode_test(void* arg)
 		status = -14;
 	list[3] = video_scheduler;
 
-	if (audioplay_create(client, &audio_render, list, 4) != 0)
+	if (audioplay_create(client, (COMPONENT_T *)&audio_render, list, 4) != 0)
 		printf("create error\n");
 
 	if (audiodest == 0)
@@ -457,18 +450,6 @@ static void* video_decode_test(void* arg)
 	format.nPortIndex = 130;
 	format.eCompressionFormat = OMX_VIDEO_CodingAVC;
 
-	//OMX_PARAM_PORTDEFINITIONTYPE portParam;
-	//memset(&portParam, 0, sizeof(OMX_PARAM_PORTDEFINITIONTYPE));
-	//portParam.nSize = sizeof(OMX_PARAM_PORTDEFINITIONTYPE);
-	//portParam.nVersion.nVersion = OMX_VERSION;
-	//if (OMX_GetParameter(ILC_GET_HANDLE(video_decode), OMX_IndexParamPortDefinition, &portParam) == OMX_ErrorNone)
-	//	printf("get error\n");
-
-	//portParam.nPortIndex = 130;
-	//portParam.nBufferSize = 188;
-	//if (OMX_SetParameter(ILC_GET_HANDLE(video_decode), OMX_IndexParamPortDefinition, &portParam) == OMX_ErrorNone)
-	//	printf("set error\n");
-
 
 	if (status == 0 &&
 		OMX_SetParameter(ILC_GET_HANDLE(video_decode), OMX_IndexParamVideoPortFormat, &format) == OMX_ErrorNone &&
@@ -494,10 +475,6 @@ static void* video_decode_test(void* arg)
 				usleep(10);
 				continue;
 			}
-			/*else if (non > 10)
-			{
-				printf("node:%d\n", non);
-			}*/
 
 			int numofts = (scan->recvlen - 12) / 188;
 			for (int i = 0; i < numofts; i++)
@@ -507,7 +484,6 @@ static void* video_decode_test(void* arg)
 				unsigned char sync = buffer[0];
 				if (sync == 0x47)
 				{
-					int startindicator = buffer[1] & 0x40;
 					short pid = ((0x1F & buffer[1]) << 8) + buffer[2];
 
 					if (pid == 0x1011)
