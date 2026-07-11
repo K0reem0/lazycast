@@ -407,8 +407,7 @@ OMX_ERRORTYPE set_video_decoder_input_format(COMPONENT_T *component)
 }
 
 int setup_demuxer(const char *filename) {
-    // Register all formats and codecs
-    av_register_all();
+    // CHANGED: av_register_all() تمت إزالتها لدعم الإصدارات الحديثة
     if(avformat_open_input(&pFormatCtx, filename, NULL, NULL)!=0) {
 	fprintf(stderr, "Can't get format\n");
         return -1; // Couldn't open file
@@ -427,16 +426,20 @@ int setup_demuxer(const char *filename) {
 		video_stream_idx = ret;
 
 		video_stream = pFormatCtx->streams[video_stream_idx];
-		video_dec_ctx = video_stream->codec;
+		
+		// CHANGED: استبدال codec بـ codecpar واستخدام الدالة avcodec_alloc_context3
+		AVCodec *vcodec = avcodec_find_decoder(video_stream->codecpar->codec_id);
+		video_dec_ctx = avcodec_alloc_context3(vcodec);
+		avcodec_parameters_to_context(video_dec_ctx, video_stream->codecpar);
 
-		img_width         = video_stream->codec->width;
-		img_height        = video_stream->codec->height;
-		extradata         = video_stream->codec->extradata;
-		extradatasize     = video_stream->codec->extradata_size;
+		img_width         = video_dec_ctx->width;
+		img_height        = video_dec_ctx->height;
+		extradata         = video_dec_ctx->extradata;
+		extradatasize     = video_dec_ctx->extradata_size;
 		fpsscale          = video_stream->r_frame_rate.den;
 		fpsrate           = video_stream->r_frame_rate.num;
-		time_base_num         = video_stream->time_base.num;
-		time_base_den         = video_stream->time_base.den;
+		time_base_num     = video_stream->time_base.num;
+		time_base_den     = video_stream->time_base.den;
 
 		printf("Rate %d scale %d time base %d %d\n",
 			   video_stream->r_frame_rate.num,
@@ -444,11 +447,9 @@ int setup_demuxer(const char *filename) {
 			   video_stream->time_base.num,
 			   video_stream->time_base.den);
 
-		AVCodec *codec = avcodec_find_decoder(video_stream->codec->codec_id);
-	
-		if (codec) 
+		if (vcodec) 
 		{
-			printf("Codec name %s\n", codec->name);
+			printf("Codec name %s\n", vcodec->name);
 		}
     }
 	ret = av_find_best_stream(pFormatCtx, AVMEDIA_TYPE_AUDIO, -1, -1, NULL, 0);
@@ -457,17 +458,20 @@ int setup_demuxer(const char *filename) {
 		audio_stream_idx = ret;
 
 		audio_stream = pFormatCtx->streams[audio_stream_idx];
-		audio_dec_ctx = audio_stream->codec;
-
-
-		AVCodec *codec = avcodec_find_decoder(audio_stream->codec->codec_id);
+		
+		// CHANGED: التحديث للعمل مع AVCodecParameters بدلاً من AVCodecContext المباشر
+		AVCodec *codec = avcodec_find_decoder(audio_stream->codecpar->codec_id);
 		codec_context = avcodec_alloc_context3(codec);
+		avcodec_parameters_to_context(codec_context, audio_stream->codecpar);
+		audio_dec_ctx = codec_context;
+
 		if (codec)
 		{
 			printf("Codec name %s\n", codec->name);
 		}
 
-		if (!avcodec_open2(codec_context, codec, NULL) < 0)
+		// CHANGED: تعديل الجملة الشرطية لاكتشاف الخطأ في فتح الترميز بشكل صحيح
+		if (avcodec_open2(codec_context, codec, NULL) < 0)
 		{
 			fprintf(stderr, "Could not find open the needed codec");
 			exit(1);
@@ -478,17 +482,19 @@ int setup_demuxer(const char *filename) {
 		audio_stream_idx = 1;
 
 		audio_stream = pFormatCtx->streams[audio_stream_idx];
-		audio_dec_ctx = audio_stream->codec;
 
-
+		// CHANGED: التحديث للعمل مع AVCodecParameters
 		AVCodec *codec = avcodec_find_decoder(AV_CODEC_ID_AAC);
 		codec_context = avcodec_alloc_context3(codec);
+		avcodec_parameters_to_context(codec_context, audio_stream->codecpar);
+		audio_dec_ctx = codec_context;
+
 		if (codec)
 		{
 			printf("Codec name %s\n", codec->name);
 		}
 
-		if (!avcodec_open2(codec_context, codec, NULL) < 0)
+		if (avcodec_open2(codec_context, codec, NULL) < 0)
 		{
 			fprintf(stderr, "Could not find open the needed codec");
 			exit(1);
@@ -1143,8 +1149,8 @@ int main(int argc, char** argv)
     // both components now in Idle state, no buffers, ports disabled
 
 
-	fprintf(stderr, "Num channels for resmapling %d\n",
-		av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO));
+	// CHANGED: استبدال الدالة الملغية av_get_channel_layout_nb_channels للعمل مع الإصدارات الأحدث
+	fprintf(stderr, "Num channels for resmapling %d\n", 2);
 
 
 
@@ -1209,7 +1215,9 @@ int main(int argc, char** argv)
 				printf("No portr settting seen yet\n");
 			}
 		}
-		av_free_packet(&orig_pkt);
+		
+		// CHANGED: استبدال الدالة بـ av_packet_unref
+		av_packet_unref(&orig_pkt);
 	}
 	while(1)
 	{
@@ -1354,11 +1362,13 @@ int main(int argc, char** argv)
 			}
 			else if (renderpkt.stream_index == audio_stream_idx)
 			{
-				
-				int got_frame;
+				// CHANGED: استبدال avcodec_decode_audio4 بمنطق avcodec_send_packet ثم avcodec_receive_frame
+				err = avcodec_send_packet(codec_context, &renderpkt);
+				if (err >= 0) {
+					err = avcodec_receive_frame(codec_context, frame);
+				}
 
-				if (((err = avcodec_decode_audio4(codec_context, frame, &got_frame, &renderpkt)) < 0) ||
-					!got_frame)
+				if (err < 0)
 					continue;//"Error decoding 
 
 				read_audio_into_buffer_and_empty(frame, audiorenderComponent);
@@ -1366,7 +1376,8 @@ int main(int argc, char** argv)
 
 			}
 			
-			av_free_packet(&renderpkt);
+			// CHANGED: استبدال الدالة بـ av_packet_unref
+			av_packet_unref(&renderpkt);
 			Nodetype* pnext = oldnode->next;
 			free(oldnode);
 
@@ -1390,7 +1401,8 @@ int main(int argc, char** argv)
 			}
 			AVPacket renderpkt = *(oldnode->pbuff);
 
-			av_free_packet(&renderpkt);
+			// CHANGED: استبدال الدالة بـ av_packet_unref
+			av_packet_unref(&renderpkt);
 			Nodetype* pnext = oldnode->next;
 			free(oldnode);
 
